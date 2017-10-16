@@ -136,6 +136,7 @@ if __name__ == "__main__":
                                                                          input_std=input_std)
             for f in list_of_files:
                 try:
+                    t = sess.run(normalized, feed_dict={f_name_placeholder: f})
                     results = sess.run(output_operation.outputs[0],
                                        {input_operation.outputs[0]: t})
                     results = np.squeeze(results)
