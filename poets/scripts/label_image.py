@@ -20,6 +20,7 @@ from __future__ import print_function
 import argparse
 import sys
 import os
+from glob import iglob
 
 import numpy as np
 import tensorflow as tf
@@ -31,17 +32,20 @@ def load_graph(model_file):
 
     with open(model_file, "rb") as f:
         graph_def.ParseFromString(f.read())
+        print('fuck you alex')
     with graph.as_default():
         tf.import_graph_def(graph_def)
 
     return graph
 
 
-def read_tensor_from_image_file(file_name, input_height=224, input_width=224,
-                                input_mean=0, input_std=255):
+def read_tensor_from_image_file(input_height=224, input_width=224,
+                                input_mean=0, input_std=255, sess=None):
     input_name = "file_reader"
     output_name = "normalized"
+    file_name = tf.placeholder(tf.string)
     file_reader = tf.read_file(file_name, input_name)
+    '''
     if file_name.endswith(".png"):
         image_reader = tf.image.decode_png(file_reader, channels=3,
                                            name='png_reader')
@@ -51,17 +55,18 @@ def read_tensor_from_image_file(file_name, input_height=224, input_width=224,
     elif file_name.endswith(".bmp"):
         image_reader = tf.image.decode_bmp(file_reader, name='bmp_reader')
     else:
-        image_reader = tf.image.decode_jpeg(file_reader, channels=3,
-                                            name='jpeg_reader')
+    '''
+    image_reader = tf.image.decode_jpeg(file_reader, channels=3,
+                                        name='jpeg_reader')
     float_caster = tf.cast(image_reader, tf.float32)
     dims_expander = tf.expand_dims(float_caster, 0)
     resized = tf.image.resize_bilinear(
         dims_expander, [input_height, input_width])
     normalized = tf.divide(tf.subtract(resized, [input_mean]), [input_std])
-    sess = tf.Session()
-    result = sess.run(normalized)
+    # sess = tf.Session()
+    # result = sess.run(normalized)
 
-    return result
+    return file_name, normalized
 
 
 def load_labels(label_file):
@@ -117,22 +122,20 @@ if __name__ == "__main__":
         output_layer = args.output_layer
 
     graph = load_graph(model_file)
-    list_of_files = [os.path.join('tf_files/test', x) for x in os.listdir('tf_files/test')]
+    # list_of_files = [os.path.join('tf_files/test', x) for x in os.listdir('tf_files/test')]
+    list_of_files = iglob('/josh_dev/EAST/out_crops/**/*.jpg', recursive=True)
     with open('output.txt', 'w') as f:
         with tf.Session(graph=graph) as sess:
-            for file_name in list_of_files:
+            input_name = "import/" + input_layer
+            output_name = "import/" + output_layer
+            input_operation = graph.get_operation_by_name(input_name)
+            output_operation = graph.get_operation_by_name(output_name)
+            f_name_placeholder, normalized = read_tensor_from_image_file(input_height=input_height,
+                                                                         input_width=input_width,
+                                                                         input_mean=input_mean,
+                                                                         input_std=input_std)
+            for f in list_of_files:
                 try:
-                    t = read_tensor_from_image_file(file_name,
-                                                    input_height=input_height,
-                                                    input_width=input_width,
-                                                    input_mean=input_mean,
-                                                    input_std=input_std)
-
-                    input_name = "import/" + input_layer
-                    output_name = "import/" + output_layer
-                    input_operation = graph.get_operation_by_name(input_name)
-                    output_operation = graph.get_operation_by_name(output_name)
-
                     results = sess.run(output_operation.outputs[0],
                                        {input_operation.outputs[0]: t})
                     results = np.squeeze(results)
@@ -141,7 +144,8 @@ if __name__ == "__main__":
                     labels = load_labels(label_file)
                     for i in top_k[:1]:
                         if results[i] > 0.8:
-                            f.writelines('{}: {}, {} \n'.format(file_name, labels[i], results[i]))
+                            f.writelines('{}: {}, {} \n'.format(
+                                file_name, labels[i], results[i]))
                             print(file_name)
                 except:
                     print('fuck you josh')
